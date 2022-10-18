@@ -1,0 +1,43 @@
+name: build
+on: push
+jobs:
+  vftool:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: make
+      - uses: actions/upload-artifact@v3
+        with:
+          name: vftool
+          path: build/vftool
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hendrikmuhs/ccache-action@v1.2
+      - name: build linux kernel
+        run: |
+          export DEBIAN_FRONTEND=non-interactive
+          sudo apt update
+          sudo apt install libelf-dev
+          curl -sSL https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.0.2.tar.xz | xz -d | tar x
+          cd linux-6.0.2
+          make defconfig
+          make -j $(nproc) CC="ccache gcc" bzImage
+      - uses: actions/upload-artifact@v3
+        with:
+          name: linux
+          path: linux-6.0.2/arch/x86/boot/bzImage
+  test:
+    needs: [ vftool, linux ]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: vftool
+      - uses: actions/download-artifact@v3
+        with:
+          name: linux
+      - name: run vftool
+        run: |
+          chmod +x vftool
+          ./vftool -t 0 -k bzImage -a 'panic=-1 console=hvc0'
